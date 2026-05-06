@@ -494,7 +494,11 @@ impl ClaudeCollector {
 
         // Status is best-effort. Signals we trust:
         //   1. Active descendant CPU → tool is running.
-        //   2. last_user_ts_ms > 0 → trailing transcript line is a real
+        //   2. current_task non-empty → latest assistant turn left a
+        //      tool_use unanswered. Catches I/O-bound tools (Read, Edit)
+        //      whose descendants stay under 5% CPU, so the CPU heuristic
+        //      alone would flicker to Waiting while the tool runs.
+        //   3. last_user_ts_ms > 0 → trailing transcript line is a real
         //      user prompt with no assistant reply yet, so the model is
         //      generating. tool_result wrappers are skipped at the
         //      parser level so this only fires for actual prompts.
@@ -1360,8 +1364,15 @@ fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
                                     result.total_cache_read += cr;
                                     result.total_cache_create += cc;
                                     // Context = input_tokens + cache_read (excludes cache_creation, #54)
+                                    // Exception: when cache_read = 0 but cache_creation > 0,
+                                    // this is a fresh session creating cache for the first time,
+                                    // so cache_creation represents the actual context size.
                                     let prev_context = result.last_context_tokens;
-                                    result.last_context_tokens = inp + cr;
+                                    result.last_context_tokens = if cr == 0 && cc > 0 {
+                                        inp + cc
+                                    } else {
+                                        inp + cr
+                                    };
                                     if result.last_context_tokens > result.max_context_tokens {
                                         result.max_context_tokens = result.last_context_tokens;
                                     }
@@ -1409,12 +1420,14 @@ fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
                                     }
                                 }
                                 // Extract all tool_use entries: timeline + current_task + file access audit
+                                let mut has_tool_use = false;
                                 if let Some(content) = msg.get("content").and_then(|c| c.as_array())
                                 {
                                     for item in content {
                                         if item.get("type").and_then(|t| t.as_str())
                                             == Some("tool_use")
                                         {
+                                            has_tool_use = true;
                                             let tool = item
                                                 .get("name")
                                                 .and_then(|n| n.as_str())
@@ -1455,8 +1468,9 @@ fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
                                         }
                                     }
                                 }
-                                // Save timestamp for duration calculation
-                                if entry_ts_ms > 0 {
+                                // Save timestamp for duration calculation — only when
+                                // tool_use is present, so we can detect "tools pending".
+                                if entry_ts_ms > 0 && has_tool_use {
                                     result.last_assistant_ts_ms = entry_ts_ms;
                                 }
                                 // Any assistant turn closes the prior "thinking" window.
@@ -1929,6 +1943,53 @@ mod tests {
         assert!(result.saw_turn);
         assert!(result.last_user_ts_ms > 0);
         assert_eq!(result.last_assistant_ts_ms, 0);
+    }
+
+    #[test]
+    fn test_parse_transcript_text_only_assistant_does_not_set_pending_ts() {
+        // Regression: a terminal text-only assistant turn (final "done"
+        // message with no tool_use) used to leave last_assistant_ts_ms
+        // set to its timestamp, which leaked into pending_since_ms and
+        // made the UI tool-duration bar render a phantom growing
+        // duration after the model had finished. Fix: only record the
+        // assistant timestamp when the turn contains tool_use blocks.
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        write_lines(
+            &mut file,
+            &[
+                r#"{"type":"user","timestamp":"2026-03-28T15:00:00Z","message":{"role":"user","content":"hi"}}"#,
+                r#"{"type":"assistant","timestamp":"2026-03-28T15:00:05Z","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":1,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0},"content":[{"type":"text","text":"all done"}]}}"#,
+            ],
+        );
+
+        let result = parse_transcript(file.path(), 0);
+
+        assert!(result.saw_turn);
+        assert_eq!(
+            result.last_assistant_ts_ms, 0,
+            "text-only assistant turn must not record a pending timestamp",
+        );
+    }
+
+    #[test]
+    fn test_parse_transcript_fresh_session_uses_cache_creation_for_context() {
+        // Regression: on a fresh session's first turn the usage block
+        // reports cache_read=0 and cache_creation>0 (the prompt is being
+        // cached for the first time). Using `inp + cr` would underreport
+        // the context as just the input tokens, hiding the real prompt
+        // size from the gauge. Fall back to `inp + cc` in that case.
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        write_lines(
+            &mut file,
+            &[
+                r#"{"type":"user","timestamp":"2026-03-28T15:00:00Z","message":{"role":"user","content":"hi"}}"#,
+                r#"{"type":"assistant","timestamp":"2026-03-28T15:00:05Z","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":4,"output_tokens":2,"cache_read_input_tokens":0,"cache_creation_input_tokens":12000},"content":[{"type":"text","text":"hello"}]}}"#,
+            ],
+        );
+
+        let result = parse_transcript(file.path(), 0);
+
+        assert_eq!(result.last_context_tokens, 12_004);
     }
 
     #[test]
