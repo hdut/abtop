@@ -416,14 +416,15 @@ pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
     })
 }
 
-/// Windows variant: also splits on `\`, strips a trailing `.exe` and common
-/// script extensions (`.js`, `.sh`, `.py`), and matches case-insensitively.
+/// Windows variant: scans all argv-like tokens, splits on `\`, strips a
+/// trailing `.exe` and common script extensions (`.js`, `.sh`, `.py`), and
+/// matches case-insensitively.
 /// Kept separate from the unix impl so non-Windows matching stays exact
 /// (`Claude` must not match `claude` on linux/macOS).
 #[cfg(windows)]
 pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
-    let mut tokens = cmd.split_whitespace().take(2);
-    tokens.any(|tok| {
+    cmd.split_whitespace().any(|tok| {
+        let tok = tok.trim_matches('"');
         let mut iter = tok.rsplit(['/', '\\']);
         let base = iter.next().unwrap_or(tok);
         let base = base
@@ -507,6 +508,15 @@ mod tests {
         ));
         // A `versions/` dir not under `<name>/` shouldn't match either.
         assert!(!cmd_has_binary("/some/versions/2.1.121", "claude"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cmd_has_binary_windows_detects_node_wrapped_codex() {
+        assert!(cmd_has_binary(
+            r#""C:\Program Files\nodejs\node.exe" C:\Users\GK\AppData\Roaming\npm\node_modules\@openai\codex\bin\codex.js -m gpt-5.5"#,
+            "codex",
+        ));
     }
 
     fn proc(pid: u32, ppid: u32) -> ProcInfo {
