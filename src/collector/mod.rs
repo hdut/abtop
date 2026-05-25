@@ -11,6 +11,16 @@ pub use mcp::McpServer;
 pub use opencode::OpenCodeCollector;
 pub use rate_limit::read_rate_limits;
 
+/// Abbreviate a filesystem path by replacing the home directory prefix with `~`.
+pub(crate) fn abbrev_path(path: &std::path::Path) -> String {
+    if let Some(home) = dirs::home_dir() {
+        if let Ok(rel) = path.strip_prefix(&home) {
+            return format!("~/{}", rel.display());
+        }
+    }
+    path.to_string_lossy().into_owned()
+}
+
 /// Redact common secret patterns to avoid displaying credentials in the TUI.
 /// Replaces the prefix and all following non-whitespace chars with [REDACTED].
 /// Best-effort: covers well-known prefixed tokens, not arbitrary high-entropy strings.
@@ -177,11 +187,21 @@ impl MultiCollector {
     /// Build a collector, skipping agents whose identifier is in `hidden`.
     /// Identifiers are matched case-insensitively against each collector's
     /// `agent_cli` name (e.g. `"claude"`, `"codex"`).
+    #[cfg(test)]
     pub fn with_hidden(hidden: &[String]) -> Self {
+        Self::with_hidden_and_claude_config_dirs(hidden, &[])
+    }
+
+    pub fn with_hidden_and_claude_config_dirs(
+        hidden: &[String],
+        claude_config_dirs: &[PathBuf],
+    ) -> Self {
         let is_hidden = |name: &str| hidden.iter().any(|h| h.eq_ignore_ascii_case(name));
         let mut collectors: Vec<Box<dyn AgentCollector>> = Vec::new();
         if !is_hidden("claude") {
-            collectors.push(Box::new(ClaudeCollector::new()));
+            collectors.push(Box::new(ClaudeCollector::with_configured_dirs(
+                claude_config_dirs.to_vec(),
+            )));
         }
         if !is_hidden("codex") {
             collectors.push(Box::new(CodexCollector::new()));

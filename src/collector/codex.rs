@@ -395,6 +395,9 @@ impl CodexCollector {
                 pending_since_ms: result.pending_since_ms,
                 thinking_since_ms: result.thinking_since_ms,
                 file_accesses: vec![],
+                config_root: super::abbrev_path(
+                    self.sessions_dir.parent().unwrap_or(std::path::Path::new(".")),
+                ),
             },
             rate_limit,
         ))

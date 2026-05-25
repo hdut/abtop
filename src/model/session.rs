@@ -180,6 +180,10 @@ pub struct AgentSession {
     pub thinking_since_ms: u64,
     /// File access audit log: every file read/written/edited by the agent.
     pub file_accesses: Vec<FileAccess>,
+    /// Config root directory for this session's agent (home-abbreviated, e.g. "~/.claude-work").
+    /// For Claude Code: the active .claude* profile folder. For Codex: "~/.codex".
+    /// For OpenCode: the data directory containing opencode.db.
+    pub config_root: String,
 }
 
 impl AgentSession {
@@ -288,6 +292,7 @@ mod tests {
             pending_since_ms: 0,
             thinking_since_ms: 0,
             file_accesses: Vec::new(),
+            config_root: String::new(),
         }
     }
 

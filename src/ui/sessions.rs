@@ -86,10 +86,11 @@ pub(crate) fn draw_sessions_panel_active(
     let w = inner.width;
     let show_pid = w >= 120;
     let show_session_id = w >= 76;
+    let show_config = w >= 100;
     let show_model = w >= 90;
     let show_tokens = w >= 86;
-    let show_memory = w >= 100;
-    let show_turn = w >= 100;
+    let show_memory = w >= 110;
+    let show_turn = w >= 110;
 
     let project_w: u16 = if w >= 120 {
         14
@@ -103,6 +104,12 @@ pub(crate) fn draw_sessions_panel_active(
         t("col.session")
     } else {
         t("col.sess")
+    };
+    let config_w: u16 = if w >= 110 { 14 } else { 10 };
+    let config_label = if w >= 110 {
+        t("col.config")
+    } else {
+        t("col.cfg")
     };
     let status_w: u16 = if w >= 100 {
         8
@@ -191,6 +198,12 @@ pub(crate) fn draw_sessions_panel_active(
                 Style::default().fg(theme.session_id),
             )));
         }
+        if show_config {
+            cells.push(Cell::from(Span::styled(
+                truncate_str(&session.config_root, config_w as usize),
+                Style::default().fg(theme.inactive_fg),
+            )));
+        }
         cells.extend([
             Cell::from(Span::styled(
                 truncate_str(&summary_col, w.saturating_sub(24) as usize),
@@ -241,10 +254,12 @@ pub(crate) fn draw_sessions_panel_active(
         rows.push(Row::new(cells).style(row_style).height(1));
 
         // 2nd line: task text in Summary column
-        let summary_idx = 3 + show_pid as usize + show_session_id as usize;
+        let summary_idx =
+            3 + show_pid as usize + show_session_id as usize + show_config as usize;
         let total_cols = 6
             + show_pid as usize
             + show_session_id as usize
+            + show_config as usize
             + show_model as usize
             + show_tokens as usize
             + show_memory as usize
@@ -297,6 +312,9 @@ pub(crate) fn draw_sessions_panel_active(
                 if show_session_id {
                     sa_cells.push(Cell::from(""));
                 }
+                if show_config {
+                    sa_cells.push(Cell::from(""));
+                }
                 sa_cells.extend([
                     Cell::from(""),
                     Cell::from(Span::styled(icon, Style::default().fg(sa_fg))),
@@ -336,6 +354,9 @@ pub(crate) fn draw_sessions_panel_active(
     if show_session_id {
         header_cells.push(Cell::from(Span::styled(session_label, header_style)));
     }
+    if show_config {
+        header_cells.push(Cell::from(Span::styled(config_label, header_style)));
+    }
     header_cells.extend([
         Cell::from(Span::styled(t("col.summary"), header_style)),
         Cell::from(Span::styled(t("col.status"), header_style)),
@@ -365,6 +386,9 @@ pub(crate) fn draw_sessions_panel_active(
     widths_vec.push(Constraint::Length(project_w)); // project
     if show_session_id {
         widths_vec.push(Constraint::Length(session_w)); // session id
+    }
+    if show_config {
+        widths_vec.push(Constraint::Length(config_w)); // config root
     }
     widths_vec.push(Constraint::Fill(1)); // summary (fills remaining)
     widths_vec.push(Constraint::Length(status_w)); // status
@@ -1281,6 +1305,7 @@ mod tests {
             pending_since_ms: 0,
             thinking_since_ms: 0,
             file_accesses: Vec::new(),
+            config_root: String::new(),
         });
 
         let backend = TestBackend::new(120, 20);
