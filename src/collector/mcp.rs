@@ -3,7 +3,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant, SystemTime};
+#[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
+use std::time::Instant;
+use std::time::{Duration, SystemTime};
 
 /// Active-thread mtime threshold: a rollout written within the last 30 minutes
 /// ACTIVE_MTIME_SECS counts as "active". File-descriptor presence alone
