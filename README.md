@@ -49,6 +49,7 @@ Pre-built binaries for all platforms are available on the [GitHub Releases](http
 ```bash
 abtop                    # Launch TUI
 abtop --once             # Print snapshot and exit
+abtop --json             # Print one JSON snapshot and exit (for scripts/tools)
 abtop --setup            # Install rate limit collection hook
 abtop --theme dracula    # Launch with a specific theme
 ```
@@ -151,6 +152,37 @@ When `language` is unset, abtop auto-detects from `LANG` — any value starting 
 | `Esc`              | Open/close config page               |
 | `q`                | Quit                                 |
 | `r`                | Force refresh                        |
+
+## Library / JSON snapshot
+
+abtop is also a library crate, so local tools can reuse its data-collection
+layer in-process — no re-scanning, no subprocesses — and serialize the same
+state the TUI renders.
+
+```bash
+abtop --json    # one-shot JSON snapshot for scripts
+```
+
+For long-running consumers, build an `App`, refresh it with
+`App::tick_no_summaries()` (which never spawns `claude --print`, so it doesn't
+touch your Claude quota), and call `App::to_snapshot(interval_ms)` to get a
+JSON-serializable [`Snapshot`]:
+
+```rust,no_run
+use abtop::app::App;
+use abtop::{config, theme::Theme};
+
+let cfg = config::load_config();
+let mut app = App::new_with_config_and_claude_dirs(
+    Theme::default(), &cfg.hidden_agents, cfg.panels, &cfg.claude_config_dirs,
+);
+app.tick_no_summaries();
+let json = serde_json::to_string(&app.to_snapshot(2_000)).unwrap();
+```
+
+`App` is not `Send` (it owns the collectors), so keep it on one thread and pass
+the serialized JSON elsewhere. [abtop-web-ui](https://github.com/XKHoshizora/abtop-web-ui)
+is a reference consumer: a local-first web dashboard built on exactly this API.
 
 ## Privacy
 
