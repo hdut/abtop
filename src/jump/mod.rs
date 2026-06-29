@@ -11,6 +11,7 @@
 //! process. Only `Failed`/`Jumped` stop the walk.
 
 mod cmux;
+#[cfg(target_os = "macos")]
 mod iterm2;
 mod tmux;
 
@@ -54,14 +55,23 @@ pub fn resolve(jumpers: &[Box<dyn TerminalJumper>], pid: u32) -> JumpOutcome {
 
 /// The registry: the single ordered source of truth for supported terminals.
 /// Order = most specific first: cmux (env-tagged) → tmux (multiplexer) →
-/// iTerm2 (emulator). They are mutually exclusive by tty, so order only
-/// matters for the multiplexer-inside-emulator case.
+/// iTerm2 on macOS (emulator). They are mutually exclusive by tty, so order
+/// only matters for the multiplexer-inside-emulator case.
+#[cfg(target_os = "macos")]
 pub fn jumpers() -> Vec<Box<dyn TerminalJumper>> {
     vec![
         Box::new(cmux::CmuxJumper),
         Box::new(tmux::TmuxJumper),
         Box::new(iterm2::ITerm2Jumper),
     ]
+}
+
+/// The registry: the single ordered source of truth for supported terminals.
+/// Non-macOS builds exclude the iTerm2 adapter so standalone Linux/Windows
+/// sessions no-op cleanly instead of trying macOS-only `osascript`.
+#[cfg(not(target_os = "macos"))]
+pub fn jumpers() -> Vec<Box<dyn TerminalJumper>> {
+    vec![Box::new(cmux::CmuxJumper), Box::new(tmux::TmuxJumper)]
 }
 
 /// Entry point used by the app: run the selected PID through the registry.
@@ -307,6 +317,15 @@ mod tests {
             JumpAttempt::NotApplicable
         );
         assert_eq!(interpret_osascript(""), JumpAttempt::NotApplicable);
+    }
+
+    #[test]
+    fn jumpers_include_platform_backends() {
+        #[cfg(target_os = "macos")]
+        assert_eq!(jumpers().len(), 3);
+
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(jumpers().len(), 2);
     }
 
     // ---- find_pane_target (tmux) ----

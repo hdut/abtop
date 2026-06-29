@@ -24,15 +24,15 @@ fn sanitize_fallback(prompt: &str, max_len: usize) -> String {
 }
 
 /// Outcome of an Enter-key jump attempt. Distinct from `Option<String>` so
-/// callers (notably `--exit-on-jump`) can tell a real tmux jump apart from
-/// a no-op (outside tmux, or empty session list).
+/// callers (notably `--exit-on-jump`) can tell a real terminal jump apart from
+/// a no-op (unsupported terminal, or empty session list).
 #[derive(Debug, PartialEq, Eq)]
 pub enum JumpOutcome {
-    /// Actually switched to a tmux pane.
+    /// Actually switched to a terminal pane/tab/window.
     Jumped,
-    /// Tried to jump in tmux but no pane owns the session's PID.
+    /// Tried to jump through an applicable backend, but the focus command failed.
     Failed(String),
-    /// Not in tmux, or nothing selected — nothing happened.
+    /// Unsupported terminal, or nothing selected — nothing happened.
     NoOp,
 }
 
