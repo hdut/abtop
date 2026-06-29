@@ -210,9 +210,9 @@ mod windows_impl {
             }
             let mem_pct = (self.sys.used_memory() as f64 / total as f64) * 100.0;
 
-            // Windows has no load average; sysinfo reports 0.0 there. Callers
-            // should render load as N/A on Windows.
-            let load1 = System::load_average().one;
+            // Windows has no native load average. Keep the wire shape stable
+            // by reporting 0.0 rather than using sysinfo's approximation.
+            let load1 = 0.0;
 
             Some(HostMetrics {
                 cpu_pct,
