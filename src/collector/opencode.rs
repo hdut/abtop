@@ -1,4 +1,4 @@
-use super::process;
+use super::{process, context_window_for_model};
 use crate::model::{AgentSession, ChildProcess, SessionStatus};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -186,6 +186,13 @@ impl OpenCodeCollector {
                 "-".to_string()
             };
 
+            let context_window = context_window_for_model(&model, "", 0);
+            let context_percent = if context_window > 0 {
+                ((ds.total_input + ds.total_output) as f64 / context_window as f64) * 100.0
+            } else {
+                0.0
+            };
+
             sessions.push(AgentSession {
                 agent_cli: "opencode",
                 pid: matched_pid,
@@ -196,7 +203,7 @@ impl OpenCodeCollector {
                 status,
                 model,
                 effort: String::new(),
-                context_percent: 0.0,
+                context_percent,
                 total_input_tokens: ds.total_input,
                 total_output_tokens: ds.total_output,
                 total_cache_read: ds.total_cache_read,
@@ -211,7 +218,7 @@ impl OpenCodeCollector {
                 token_history: vec![],
                 context_history: vec![],
                 compaction_count: 0,
-                context_window: 0,
+                context_window,
                 subagents: vec![],
                 mem_file_count: 0,
                 mem_line_count: 0,

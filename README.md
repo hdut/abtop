@@ -20,6 +20,9 @@ All read-only. No API keys. No auth.
 
 ### macOS / Linux
 
+> [!IMPORTANT]
+> On Linux, ensure `sqlite3` is installed to enable monitoring for OpenCode sessions.
+
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/graykode/abtop/releases/latest/download/abtop-installer.sh | sh
 ```
